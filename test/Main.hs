@@ -1,6 +1,7 @@
 module Main where
 
 import Control.Monad (forM, filterM)
+import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Lazy as LBS
 import Data.List (isPrefixOf, isSuffixOf, isInfixOf, sort)
 import Data.Ord (Down(..))
@@ -28,6 +29,7 @@ import System.Process
   )
 import Test.Tasty (TestTree, defaultMain, testGroup)
 import Test.Tasty.Golden (goldenVsStringDiff)
+import Test.Tasty.HUnit (assertBool, assertEqual, testCase)
 
 -- | Convert a String to a lazy ByteString using UTF-8 encoding.
 stringToLBS :: String -> LBS.ByteString
@@ -58,8 +60,49 @@ main = do
     [ testGroup "Succeed" succeedTests
     , testGroup "Fail" failTests
     , testGroup "Custom"
-        [ testGroup "Incremental" customTests ]
+        [ testGroup "Incremental" customTests
+        , configCacheTest testDir buildDir
+        ]
     ]
+
+configCacheTest :: FilePath -> FilePath -> TestTree
+configCacheTest testDir buildDir =
+  testCase "configuration changes invalidate generated Haskell" $ do
+    createDirectoryIfMissing True outDir
+    let run args = do
+          (exitCode, stdout, stderr) <- readProcessWithExitCode
+            "agda2hs"
+            ([agdaFile, "-o", outDir, "-v0", "-i" ++ succeedDir] ++ args)
+            ""
+          assertEqual (stdout ++ stderr) ExitSuccess exitCode
+          BS.readFile generatedFile
+        hasHiding = BS.isInfixOf "import Prelude hiding (LT)"
+
+    -- Initial compilation, without configuration.
+    before <- run ["--ignore-interfaces"]
+    assertBool "Unexpected Prelude hiding" (not $ hasHiding before)
+
+    -- Adding configuration must regenerate Haskell.
+    writeFile configFile "prelude:\n  implicit: true\n  hiding: [LT]\n"
+    after <- run ["--config", configFile]
+    assertBool "Configuration was ignored" (hasHiding after)
+
+    -- Removing configuration must restore the original output.
+    without <- run []
+    assertEqual "Removing configuration was ignored" before without
+
+    -- Editing the same configuration file must also regenerate Haskell.
+    _ <- run ["--config", configFile]
+    writeFile configFile "prelude:\n  implicit: true\n  hiding: []\n"
+    changed <- run ["--config", configFile]
+    assertBool "Configuration edit was ignored" (not $ hasHiding changed)
+    assertBool "Output was not regenerated" (after /= changed)
+  where
+    succeedDir = testDir </> "Succeed"
+    outDir = buildDir </> "ConfigCache"
+    agdaFile = succeedDir </> "Datatypes.agda"
+    configFile = outDir </> "agda2hs.yaml"
+    generatedFile = outDir </> "Datatypes.hs"
 
 -- | Discover all .agda files under the Succeed directory recursively.
 -- Files are ordered by: modification date (newest first), then golden value

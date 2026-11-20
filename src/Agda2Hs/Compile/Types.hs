@@ -9,6 +9,7 @@ import Control.Monad.State ( StateT(..) )
 import Control.DeepSeq ( NFData(..) )
 
 import Data.IORef
+import Data.ByteString ( ByteString )
 import Data.Maybe ( isJust )
 import Data.Set ( Set )
 import Data.Map ( Map )
@@ -25,6 +26,7 @@ import qualified Agda2Hs.Language.Haskell as Hs
 
 data GlobalEnv = GlobalEnv
   { globalOptions :: Options
+  , backendOptionsStamp :: ByteString
   , compileToMap :: IORef (Map QName QName)
   -- ^ names with a compile-to pragma
   , inlineSymbols :: IORef (Set QName)

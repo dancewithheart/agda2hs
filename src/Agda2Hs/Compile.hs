@@ -8,6 +8,8 @@ import Control.Monad.State ( gets )
 import Control.Arrow ((>>>))
 import Data.IORef
 import Data.List ( isPrefixOf, group, sort )
+import qualified Data.ByteString as BS
+import System.Directory ( doesFileExist )
 
 import qualified Data.Map as M
 import qualified Data.Set as S
@@ -41,9 +43,10 @@ import qualified Agda2Hs.Language.Haskell as Hs
 globalSetup :: Options -> TCM GlobalEnv
 globalSetup opts = do
   opts <- checkConfig opts
+  stamp <- liftIO $ optionsStamp opts
   ctMap <- liftIO $ newIORef M.empty
   ilMap <- liftIO $ newIORef S.empty
-  return $ GlobalEnv opts ctMap ilMap
+  return $ GlobalEnv opts stamp ctMap ilMap
 
 initCompileEnv :: GlobalEnv -> TopLevelModuleName -> SpecialRules -> CompileEnv
 initCompileEnv genv tlm rewrites = CompileEnv
@@ -77,8 +80,14 @@ moduleSetup genv _ m mifile = do
     -- check whether the file needs to be recompiled
     uptodate <- case mifile of
       Nothing -> pure False
-      Just ifile -> let ofile = moduleFileName opts m in
-        liftIO =<< isNewerThan <$> ofile <*> pure ifile
+      Just ifile -> do
+        ofile <- moduleFileName opts m
+        newer <- liftIO $ isNewerThan ofile ifile
+        stamped <- liftIO $ doesFileExist (ofile ++ ".agda2hs-options")
+        sameOptions <- if stamped
+          then (== backendOptionsStamp genv) <$> liftIO (BS.readFile (ofile ++ ".agda2hs-options"))
+          else pure False
+        pure $ newer && sameOptions
     if uptodate then do
       reportSDoc "agda2hs.compile" 3 $ text "Module " <+> prettyTCM m <+> text " is already up-to-date"
       -- Even though we skip compilation, we still need to record the pragmas

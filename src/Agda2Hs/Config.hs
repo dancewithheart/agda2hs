@@ -1,5 +1,5 @@
 -- Read additional configuration options from a file.
-module Agda2Hs.Config (checkConfig) where
+module Agda2Hs.Config (checkConfig, optionsStamp) where
 
 import Control.Monad.IO.Class ( MonadIO(liftIO) )
 
@@ -9,6 +9,8 @@ import Data.Maybe ( fromMaybe )
 import Data.Aeson ( FromJSON(parseJSON), withObject, (.:), (.:?), (.!=) )
 import qualified Data.Aeson.Types as Aeson
 import qualified Data.Map.Strict as Map
+import qualified Data.ByteString as BS
+import qualified Data.ByteString.Char8 as BS8
 import qualified Data.Yaml as Yaml
 
 import Agda2Hs.Compile.Types
@@ -67,4 +69,11 @@ checkConfig opts
   | Just src <- optConfigFile opts
   = readConfigFile src <&> applyConfig opts
 checkConfig opts = return opts
+
+-- Record the inputs that can change generated Haskell without changing Agda.
+optionsStamp :: Options -> IO BS.ByteString
+optionsStamp opts = do
+  config <- traverse BS.readFile (optConfigFile opts)
+  return $ BS8.pack (show (optConfigFile opts, optExtensions opts))
+        <> BS.singleton 0 <> fromMaybe BS.empty config
 

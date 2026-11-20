@@ -32,6 +32,8 @@ data-files:
     test/Succeed/**/*.hs
     test/Fail/*.agda
     test/Fail/*.err
+    test/ConfigCache/*.agda
+    test/ConfigCache/expected.txt
 
 source-repository head
   type:     git

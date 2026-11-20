@@ -6,6 +6,7 @@ import Control.Monad.IO.Class ( MonadIO(liftIO) )
 import Data.Function ( on )
 import Data.List ( sortBy, nub, unzip4 )
 import Data.Maybe ( fromMaybe, isNothing )
+import qualified Data.ByteString as BS
 
 import System.FilePath ( takeDirectory )
 import System.Directory ( createDirectoryIfMissing )
@@ -120,4 +121,7 @@ writeModule genv _ isMain m outs = do
 
     reportSLn "" 1 $ "Writing " ++ hsFile
 
-    liftIO $ ensureDirectory hsFile >> writeFile hsFile output
+    liftIO $ do
+      ensureDirectory hsFile
+      writeFile hsFile output
+      BS.writeFile (hsFile ++ ".agda2hs-options") (backendOptionsStamp genv)
